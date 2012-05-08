@@ -33,6 +33,8 @@ CONTROLS
 
     any letter, number, symbol, enter key, or backspace: actually write stuff
 
+	Mouse: click on a location to move the cursor there
+
 
 NOTES
     There may be some trouble with getting special keys such as page up, home, f2, etc. to be correctly interpreted when logged in via ssh.
@@ -50,12 +52,16 @@ BUGS/LIMITATIONS
 
     COED does not support the tab character. Any tabs in an opened file will be silently replaced with spaces.
 
+    Clicking beyond the end of the file scrolls the screen
+
 NEW STUFF
     Fixed the bug that caused the program to block/crash during the class demonstration
 
     Added support for files of arbitrary size
 
     Fixed a bunch of bugs that adding the previous feature introduced
+
+	Added basic mouse support
 
 
 

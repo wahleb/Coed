@@ -1016,6 +1016,18 @@ void do_backspace() {
 	pthread_rwlock_unlock(&data->lock);
 }
 
+void handle_mouse() {
+	MEVENT event;
+	if(getmouse(&event) == OK && event.bstate == BUTTON1_PRESSED) {
+		read_lock();
+		int dest_line = relative_line(data->line_at[user_no],event.y - lines_from_top);
+		lines_from_top = event.y;//FIXME: this produces interesting behavior when clicking below the bottom of the file
+		empty_buf();
+		move_to_screen_pos(dest_line,event.x + horizontal_scroll);
+		pthread_rwlock_unlock(&data->lock);
+	}
+}
+
 void clear_all() {
 	int line = data->first_line;
 	while(line != -1) {
@@ -1131,6 +1143,9 @@ int main(int argc,char *argv[]) {
 		leaveok(stdscr,true);
 		curs_set(0);
 
+		mousemask(BUTTON1_PRESSED,NULL);
+		mouseinterval(0);
+
 		slk_set(1,"Debug",0);
 		slk_set(2,"Save",0);
 		slk_set(3,"Load",0);
@@ -1219,6 +1234,9 @@ int main(int argc,char *argv[]) {
 			case KEY_BACKSPACE:
 			case 127://?
 				do_backspace();
+				break;
+			case KEY_MOUSE:
+				handle_mouse();
 				break;
 			case KEY_F(1):
 				if(dialog("Save debug info to what file?",name) != -1) {
