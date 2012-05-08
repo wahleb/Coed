@@ -612,20 +612,6 @@ int read_file(FILE *file) {
 		block_truncate(newline,len);
 		copy_to_line(newline,0,tmp,len);
 
-		/*
-		memcpy(b_get(newline).str,tmp,len < LINE_LEN ? len : LINE_LEN);
-		int pos = LINE_LEN;
-		int block = newline;
-		while(pos + LONG_LINE_LEN < len) {
-			block = b_get(block).longline = alloc_block();
-			memcpy(b_get(block).str,tmp + pos,LONG_LINE_LEN);
-			pos += LONG_LINE_LEN;
-		}
-		if(pos < len) {
-			block = b_get(block).longline = alloc_block();
-			memcpy(b_get(block).str,tmp + pos,len - pos);
-		}
-*/
 		line = newline;
 	}
 
@@ -720,12 +706,10 @@ void type_letter(char c) {
 
 }
 
+//could be optimized, but it probably doesn't matter
 void do_enter() {
 	write_lock();
 
-//the first way is simpler, but less optimal; the second is the opposite
-//not sure which to use
-#if 1
 	int line_a = data->line_at[user_no];
 	int line_b = alloc_block();
 
@@ -759,70 +743,7 @@ void do_enter() {
 	}
 	data->line_at[user_no] = line_b;
 	data->char_at[user_no] = 0;
-#else
-	int line_a = data->line_at[user_no];
-	int line_b = alloc_block();
 
-	b_get(line_b).longline = -1;
-	b_get(line_b).buffer = -1;
-	int line_c = b_get(line_b).next = b_get(line_a).next;
-	b_get(line_b).prev = line_a;
-	b_get(line_a).next = line_b;
-
-	if(line_c != -1)
-		b_get(line_c).prev = line_b;
-
-
-	int len = line_length(line_a);
-	int pos = data->char_at[user_no];
-
-	char tmp[len - pos];
-	copy_from_line(line_a,pos,tmp,len-pos);
-
-	block_truncate(line_a,pos+1);
-
-	int cpos = pos;
-	int block = block_at(line_a,&cpos);
-	b_get(block).str[cpos] = '\0';
-
-	block_truncate(line_b,len - pos);
-	copy_to_line(line_b,0,tmp,len-pos);
-
-	int user;
-	for(user=0;user <USERS;++user) {
-		if(data->line_at[user] == line_a && data->char_at[user] > pos) {
-			data->line_at[user] = line_b;
-			data->char_at[user] -= pos;
-		}
-	}
-
-	int moved_bufs;
-	int user_buf = data->user_buf[user_no];
-	if(user_buf != -1) {
-		moved_bufs = b_get(user_buf).next_buf;
-		b_get(user_buf).next_buf = -1;
-		flush_buf(line_a,user_buf);//does a lot of wasted work in this situation
-		remove_buf(line_a,user_buf);
-		data->user_buf[user_no] = -1;
-
-	} else {
-		moved_bufs = b_get(line_a).buffer;
-		while(moved_bufs != -1 && b_get(moved_bufs).buf_pos < pos)
-			moved_bufs = b_get(moved_bufs).next_buf;
-	}
-
-	b_get(line_b).buffer = moved_bufs;
-	while(moved_bufs != -1) {
-		int owner = b_get(moved_bufs).buf_owner;
-		data->char_at[owner] = (b_get(moved_bufs).buf_pos -= pos);
-		data->line_at[owner] = line_b;
-		moved_bufs = b_get(moved_bufs).next_buf;
-	}
-
-	data->line_at[user_no] = line_b;
-	data->char_at[user_no] = 0;
-
-#endif
 	renumber_lines(line_a);
 	++lines_from_top;
 	pthread_rwlock_unlock(&data->lock);
