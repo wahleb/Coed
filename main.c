@@ -540,7 +540,11 @@ int user_after(int line,int* pos) {
 		}
 	}
 	*pos = u_pos;
-	return user;
+
+	if(data->line_at[user_no] == line && data->user_buf[user_no] == -1 && data->char_at[user_no] == u_pos)
+		return user_no;//if we share a spece with others we should always draw our own cursor
+	else
+		return user;
 }
 
 void draw_screen() {
@@ -1155,6 +1159,14 @@ int dialog(const char* msg,char* input) {
 	mvwgetnstr(msg_win,3,1,input,NAME_LEN);
 	noecho();
 	delwin(msg_win);
+
+	//something we just did seems to turn off our delay mode, so we need to set it again
+#if DELAY
+		halfdelay(DELAY);
+#else
+		nodelay(stdscr,true);
+#endif
+
 	if(input[0] == '\0')
 		return -1;
 	else

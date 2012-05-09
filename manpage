@@ -51,8 +51,6 @@ BUGS/LIMITATIONS
 
 	Any user with write access to the shared memory can cause the program to write to arbitrary memory locations. Do not use this program if you are worried about security.
 
-	Tabs are treated as if they were still one column wide for things like click to move
-
 NEW STUFF
 	Fixed the bug that caused the program to block/crash during the class demonstration
 
