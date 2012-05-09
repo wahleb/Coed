@@ -241,12 +241,6 @@ int block_at(int line,int* offset) {
 	return line;
 }
 
-//calling this repeatedly to iterate through the letters on a line is inefficient, but it makes everything MUCH easier
-char letter_at(int line,int pos) {
-	int block = block_at(line,&pos);
-	return b_get(block).str[pos];
-}
-
 void block_truncate(int line,int needed_len) {
 	int block = line;
 
@@ -341,14 +335,37 @@ char* get_line_text(int line) {
 	return text;
 }
 
+int tab_adjust(const char* str,int col,int len) {
+	int i;
+	for(i=0;i<len;++i) {
+		if(str[i] == '\t')
+			col += TABSIZE - (col % TABSIZE);//double check this
+		else
+			++col;
+	}
+	return col;
+}
+
 //always bounds check the return value when this is called without a write lock
 int to_screen_pos(int line,int pos) {
-	int spos = pos;
+	int spos = 0;
+	int lpos = 0;
 	int block = b_get(line).buffer;
 	while(block != -1 && b_get(block).buf_pos < pos) {
-		spos += b_get(block).buf_used;
+		int len = b_get(block).buf_pos - lpos;
+		char tmp[len];
+		copy_from_line(line,lpos,tmp,len);
+		spos = tab_adjust(tmp,spos,len);
+		spos = tab_adjust(b_get(block).str,spos,b_get(block).buf_used);
+
+		lpos = b_get(block).buf_pos;
 		block = b_get(block).next_buf;
 	}
+
+	int len = pos - lpos;
+	char tmp[len];
+	copy_from_line(line,lpos,tmp,len);
+	spos = tab_adjust(tmp,spos,len);
 	return spos;
 }
 
@@ -532,6 +549,8 @@ void draw_screen() {
 	erase();
 	read_lock();
 
+	//changes to edit buffers between now and when we print the line our cursor is on might invalidate 
+	//the position we are about to calculate and push our cursor off the screen for a fraction of a second
 	int user_screen_pos = to_screen_pos(data->line_at[user_no],data->char_at[user_no]) +
 		(data->user_buf[user_no] == -1 ? 0 : b_get(data->user_buf[user_no]).buf_used);
 
@@ -862,7 +881,7 @@ void flush_pos(int pos) {
 	}
 }
 
-
+//FIXME: take tabs in to account
 void move_to_screen_pos(int line,int spos) {
 	int len = line_length(line) - 1;
 	int extra = 0;
@@ -870,8 +889,8 @@ void move_to_screen_pos(int line,int spos) {
 	while(block != -1) {
 		if(spos - extra <= b_get(block).buf_pos)//the screen position fell outside any buffers
 			break;
-		else if(b_get(block).buf_pos == len  ||
-				spos - extra <= b_get(block).buf_pos + b_get(block).buf_used) {//should this be <= or <
+		else if(b_get(block).buf_pos == len  ||//the destination will fall inside this buffer when clipped to the end of the line
+				spos - extra <= b_get(block).buf_pos + b_get(block).buf_used) {//the destination is inside a buffer eve without clipping
 
 			data->line_at[user_no] = line;//it is possible that the line we intended to move to will be deleted after we release the lock
 			relock_write();
