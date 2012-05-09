@@ -44,7 +44,7 @@ struct Line {
 		struct {
 			int prev;
 			int next;
-			int lineno;//not currently used, may be inaccurate
+			int lineno;
 			int buffer;
 //			int seq;//todo
 			int longline;
@@ -80,6 +80,7 @@ int user_no = -1;
 int lines_from_top = 0;
 int horizontal_scroll = 0;
 int blocks_known = 0;
+bool show_lineno = true;
 
 
 void free_block(int block);
@@ -216,7 +217,7 @@ int line_length(int line) {
 	}
 }
 
-int buf_count(int line) {
+int buffer_count(int line) {
 	int block = b_get(line).buffer;
 	int c = 0;
 	while(block != -1) {
@@ -238,6 +239,12 @@ int block_at(int line,int* offset) {
 	}
 	*offset = off;
 	return line;
+}
+
+//calling this repeatedly to iterate through the letters on a line is inefficient, but it makes everything MUCH easier
+char letter_at(int line,int pos) {
+	int block = block_at(line,&pos);
+	return b_get(block).str[pos];
 }
 
 void block_truncate(int line,int needed_len) {
@@ -315,7 +322,7 @@ void copy_from_line(int line,int pos,char* dest,int n) {
 char* get_line_text(int line) {
 	int line_len = line_length(line);
 	//the size of the buffers may change, so allocate enough to hold the maximum size
-	char *text = malloc(line_len + (LINE_LEN * buf_count(line)));
+	char *text = malloc(line_len + (LINE_LEN * buffer_count(line)));
 
 	int block;
 	int total_pos = 0;
@@ -504,6 +511,21 @@ int relative_line(int line,int dis) {
 	return line;
 }
 
+int user_after(int line,int* pos) {
+	int user = -1;
+	int u_pos = INT_MAX;
+	int i;
+	for(i=0;i<USERS;++i) {
+		int p = data->char_at[i];
+		if(data->line_at[i] == line && data->user_buf[i] == -1 && p > *pos && p < u_pos) {
+			user = i;
+			u_pos = p;
+		}
+	}
+	*pos = u_pos;
+	return user;
+}
+
 void draw_screen() {
 	if(lines_from_top >= LINES)
 		lines_from_top = LINES - 1;
@@ -535,42 +557,55 @@ void draw_screen() {
 		if(line == -1) {
 			break;
 		}
-		char* text = get_line_text(line);
-		int len = strlen(text);
 
-		if(len >= horizontal_scroll) {
-			chtype display_text[len+1];
-			for(i=0;i<len;++i)
-				display_text[i] = text[i];
+		int len = line_length(line);
 
-			display_text[len] = ' ';
+		char text[len];
+		copy_from_line(line,0,text,len);
+		text[len-1] = ' ';
 
-			int adjust = 0;
-			int block = b_get(line).buffer;
-			while(block != -1) {
-				adjust += b_get(block).buf_used;
-			//	mvchgat(window_line,b_get(block).buf_pos + adjust,1,A_STANDOUT,0,NULL);
-				if(b_get(block).buf_pos + adjust <= len)
-					display_text[b_get(block).buf_pos + adjust] |= COLOR_PAIR(b_get(block).buf_owner + 1);
+		chtype display_text[TABSIZE * (len + buffer_count(line) * LINE_LEN)];//allocate enough space for the worst case: a line made up of only tabs with full buffers also containing only tabs
+
+		int spos = 0;
+		int lpos = 0;
+
+		int block = b_get(line).buffer;
+		int next_user_pos = -1;
+		int next_user = user_after(line,&next_user_pos);
+		for(lpos = 0;lpos < len;++lpos) {
+			chtype next_attr = 0;//attributes to be OR'd with the next character to be printed
+			if(lpos == next_user_pos) {
+				next_attr = COLOR_PAIR(next_user + 1);
+				next_user = user_after(line,&next_user_pos);
+			}
+
+			while(block != -1 && b_get(block).buf_pos == lpos) {
+				int buf_len = b_get(block).buf_used;
+				int i;
+				for(i=0;i<buf_len;++i) {
+					if(b_get(block).str[i] == '\t') {
+						display_text[spos++] = ' ' | next_attr;
+						while(spos % TABSIZE)
+							display_text[spos++] = ' ';
+					} else
+						display_text[spos++] = b_get(block).str[i] | next_attr;
+					next_attr = 0;
+				}
+				next_attr = COLOR_PAIR(b_get(block).buf_owner+1);
 				block = b_get(block).next_buf;
 			}
 
-			for(i=0;i<USERS;++i) {
-				if(data->line_at[i] == line &&
-						data->user_buf[i] == -1) {
-					int pos = to_screen_pos(line,data->char_at[i]);
-					if(pos <= len) {
-						if(!(display_text[pos] & (~A_CHARTEXT)))
-							display_text[pos] |= COLOR_PAIR(i+1);
-						else if(i == user_no)
-							display_text[pos] = (display_text[pos] & A_CHARTEXT) | COLOR_PAIR(i+1);
-					}
-				}
-			}
-
-			mvaddchnstr(window_line,0,display_text+horizontal_scroll,len-horizontal_scroll+1);
+			if(text[lpos] == '\t') {
+				display_text[spos++] = ' ' |next_attr;
+				while(spos % TABSIZE)
+					display_text[spos++] = ' ';
+			} else
+				display_text[spos++] = text[lpos] | next_attr;
 		}
-		free(text);
+
+		if(spos > horizontal_scroll)
+			mvaddchnstr(window_line,0,display_text+horizontal_scroll,spos-horizontal_scroll);
+
 		line = b_get(line).next;
 	}
 
@@ -594,10 +629,12 @@ int read_file(FILE *file) {
 		else
 			len += 1;//for consistency with other parts of my code I am including the null byte in the length of a string
 
+		/*
 		int i;
 		for(i=0;i<len-1;++i)
 			if(tmp[i] == '\t')
 				tmp[i] = ' ';
+		*/
 
 		int newline = alloc_block();
 		b_get(newline).prev = line;
@@ -647,7 +684,7 @@ void dump_debug(FILE* stream,bool get_lock) {
 	if(get_lock)
 		write_lock();
 
-	fprintf(stream,"shm_name: %s\tuser_no: %d\tuser_buf: %d\tlines_from_top: %d\tfirst_free_block: %d\tblocks_avail: %d\n\n",shm_name,user_no,data->user_buf[user_no],lines_from_top,data->first_free_block,data->blocks_avail);
+	fprintf(stream,"shm_name: %s\tuser_no: %d\tuser_buf: %d\tlines_from_top: %d\thorizontal_scroll: %d\tfirst_free_block: %d\tblocks_avail: %d\n\n",shm_name,user_no,data->user_buf[user_no],lines_from_top,horizontal_scroll,data->first_free_block,data->blocks_avail);
 
 	int user;
 	for(user=0;user<USERS;++user)
@@ -1021,7 +1058,7 @@ void handle_mouse() {
 	if(getmouse(&event) == OK && event.bstate == BUTTON1_PRESSED) {
 		read_lock();
 		int dest_line = relative_line(data->line_at[user_no],event.y - lines_from_top);
-		lines_from_top = event.y;//FIXME: this produces interesting behavior when clicking below the bottom of the file
+		lines_from_top += b_get(dest_line).lineno - b_get(data->line_at[user_no]).lineno;//different than event.y iff the click was below the bottom of the file
 		empty_buf();
 		move_to_screen_pos(dest_line,event.x + horizontal_scroll);
 		pthread_rwlock_unlock(&data->lock);
@@ -1129,6 +1166,7 @@ int main(int argc,char *argv[]) {
 	if(!debug) {
 		slk_init(3);
 		initscr();
+		TABSIZE = 4;//personal preference
 		start_color();
 		use_default_colors();
 
@@ -1286,6 +1324,9 @@ int main(int argc,char *argv[]) {
 						relative_line(data->line_at[user_no],LINES),
 						to_screen_pos(data->line_at[user_no],data->char_at[user_no]));
 				pthread_rwlock_unlock(&data->lock);
+				break;
+			case '\t':
+				type_letter('\t');
 				break;
 			default:
 				if(isprint(key))

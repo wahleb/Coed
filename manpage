@@ -1,67 +1,68 @@
 Welcome to COED, the COperative EDitor!
 
 SYNOPSIS
-    coed [-d] [-c filename] roomname
+	coed [-d] [-c filename] roomname
 
 DESCRIPTION
-    COED is a program based (very loosely) on nano, but which allows multiple users to edit a file simultaniously and see changes in real time.
-    On the other hand, COED has significantly less functionality than other text editors when it comes to actually editing text.
+	COED is a program based (very loosely) on nano, but which allows multiple users to edit a file simultaneously and see changes in real time.
+	On the other hand, COED has significantly less functionality than other text editors when it comes to actually editing text.
 
 OPTIONS
-    The options may be given in any order, before or after the room name.
-    Single letter options can be combined after a single dash, but using both -c and -d at the same time is kinda pointless
-    
-    -c {file} Create a new room and initialize it with the contents of the specified file. If the room already exists it will be overwritten. Do not use this on a room currently in use.
+	The options may be given in any order, before or after the room name.
+	Single letter options can be combined after a single dash, but using both -c and -d at the same time is kinda pointless
+	
+	-c {file} Create a new room and initialize it with the contents of the specified file. If the room already exists it will be overwritten. Do not use this on a room currently in use.
 
-    -d Instead of joining the room, print out info about the structure of the underlying shared memory to stderr and then exit. Mainly useful for debugging.
+	-d Instead of joining the room, print out info about the structure of the underlying shared memory to stderr and then exit. Mainly useful for debugging.
 
 CONTROLS
-    F1:  Print out debug information to a file
+	F1:  Print out debug information to a file
 
-    F2:  Save a copy of the current workspace. (refer to NOTES if this does not work)
+	F2:  Save a copy of the current workspace. (refer to NOTES if this does not work)
 
-    F3:  Replace the current workspace with the contents of another file. If the specified file can not be opened or no file is specified then no changes will be made.
-         Unlike starting coed with -c, this will work correctly even if there are connected users.
+	F3:  Replace the current workspace with the contents of another file. If the specified file can not be opened or no file is specified then no changes will be made.
+		 Unlike starting coed with -c, this will work correctly even if there are connected users.
 
-    F10: Quit COED.
+	F10: Quit COED.
 
-    Arrow keys: Move around
+	Arrow keys: Move around
 
-    Page Up/Page Down: Jump up or down by several lines (refer to NOTES if this does not work)
+	Page Up/Page Down: Jump up or down by several lines (refer to NOTES if this does not work)
 
-    Home/End: Go to the beginning or end of the current line (refer to NOTES if this does not work)
+	Home/End: Go to the beginning or end of the current line (refer to NOTES if this does not work)
 
-    any letter, number, symbol, enter key, or backspace: actually write stuff
+	any letter, number, symbol, enter key, tab key, or backspace: actually write stuff
 
 	Mouse: click on a location to move the cursor there
 
 
 NOTES
-    There may be some trouble with getting special keys such as page up, home, f2, etc. to be correctly interpreted when logged in via ssh.
-    This probably has something to do with an incorrect setting in termcap or whatnot, but the simplest workaround is probably to just run COED inside
-    of screen and let screen handle all those settings for you. To do so just run "screen /tmp/coed room1"
+	There may be some trouble with getting special keys such as page up, home, f2, etc. to be correctly interpreted when logged in via ssh.
+	This probably has something to do with an incorrect setting in termcap or whatnot, but the simplest workaround is probably to just run COED inside
+	of screen and let screen handle all those settings for you. To do so just run "screen /tmp/coed room1"
+	Ironically, it seems that when using putty coed will only receive mouse input when NOT run in screen.
 
 BUGS/LIMITATIONS
-    COED does not check whether a piece of shared memory is valid before attempting to connect. Attempting to connect to shared memory that uses
-    a different structure will result in coruption of data.
+	COED does not check whether a piece of shared memory is valid before attempting to connect. Attempting to connect to shared memory that uses
+	a different structure will result in corruption of data.
 
-    If the program exits while it holds a lock that lock will remain, making all other connected programs to wait indefinetly.
-    This will only occur when the termination was due to abnormal circumstances such as the receipt of a signal.
+	If the program exits while it holds a lock that lock will remain, making all other connected programs to wait indefinitely.
+	This will only occur when the termination was due to abnormal circumstances such as the receipt of a signal.
 
-    Any user with write access to the shared memory can cause the program to write to arbitrary memory locations. Do not use this program if you are worried about security.
+	Any user with write access to the shared memory can cause the program to write to arbitrary memory locations. Do not use this program if you are worried about security.
 
-    COED does not support the tab character. Any tabs in an opened file will be silently replaced with spaces.
-
-    Clicking beyond the end of the file scrolls the screen
+	Tabs are treated as if they were still one column wide for things like click to move
 
 NEW STUFF
-    Fixed the bug that caused the program to block/crash during the class demonstration
+	Fixed the bug that caused the program to block/crash during the class demonstration
 
-    Added support for files of arbitrary size
+	Added support for files of arbitrary size
 
-    Fixed a bunch of bugs that adding the previous feature introduced
+	Fixed a bunch of bugs that adding the previous feature introduced
 
 	Added basic mouse support
+
+	Rewrote the rendering code to support tabs
 
 
 
