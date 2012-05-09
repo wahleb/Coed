@@ -881,31 +881,59 @@ void flush_pos(int pos) {
 	}
 }
 
-//FIXME: take tabs in to account
-void move_to_screen_pos(int line,int spos) {
-	int len = line_length(line) - 1;
-	int extra = 0;
+void move_to_screen_pos(int line,int dest) {
+	int remaining = line_length(line) - 1;
+	int spos = 0;
+	int lpos = 0;
+
 	int block = b_get(line).buffer;
 	while(block != -1) {
-		if(spos - extra <= b_get(block).buf_pos)//the screen position fell outside any buffers
-			break;
-		else if(b_get(block).buf_pos == len  ||//the destination will fall inside this buffer when clipped to the end of the line
-				spos - extra <= b_get(block).buf_pos + b_get(block).buf_used) {//the destination is inside a buffer eve without clipping
-
-			data->line_at[user_no] = line;//it is possible that the line we intended to move to will be deleted after we release the lock
-			relock_write();
-			line = data->line_at[user_no];
-			flush_line(line);
-			len = line_length(line) - 1;
-			extra = 0;
+		int len = b_get(block).buf_pos - lpos;
+		char tmp[len];
+		copy_from_line(line,lpos,tmp,len);
+		int new_spos = tab_adjust(tmp,spos,len);
+		if(new_spos >= dest) {//the screen position is before the current buffer
+			remaining = b_get(block).buf_pos;
 			break;
 		}
 
-		extra += b_get(block).buf_used;
+		spos = tab_adjust(b_get(block).str,new_spos,b_get(block).buf_used);
+
+		if(b_get(block).buf_pos == remaining ||//the destination will fall inside this buffer when clipped to the end of the line
+				spos >= dest) {//the destination is inside a buffer even without clipping
+
+			//it is possible that the line we intended to move to will be deleted after we release the lock
+			data->char_at[user_no] = 0;//so we don't have an invalid position while the line is being flushed
+			data->line_at[user_no] = line;
+
+			relock_write();
+			line = data->line_at[user_no];
+			flush_line(line);
+			remaining = line_length(line) - 1;
+
+			lpos = spos = 0;//start again now that there are no buffers
+			break;
+		}
+		lpos = b_get(block).buf_pos;
 		block = b_get(block).next_buf;
 	}
+
+	int len = remaining - lpos;
+	char tmp[len];
+	copy_from_line(line,lpos,tmp,len);
+
+	int i;
+	for(i=0;i<len;++i) {
+		if(tmp[i] == '\t')
+			spos += TABSIZE - (spos % TABSIZE);
+		else
+			++spos;
+		if(spos > dest)
+			break;
+	}
+
 	data->line_at[user_no] = line;
-	data->char_at[user_no] = spos - extra > len ? len : spos - extra;
+	data->char_at[user_no] = lpos + i;
 	return;
 }
 
