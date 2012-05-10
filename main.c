@@ -18,6 +18,7 @@
 
 #include <stdio.h>
 
+#include <math.h>//only to need this for calculationg lineno_width
 
 #define USERS 32
 
@@ -62,14 +63,15 @@ struct Line {
 
 struct Data {
 	pthread_rwlock_t lock;
-	int line_at[USERS];
 	//NOT line number, but the index for the first block of the line
 	//-2 indicates no user, -1 is a user with no location (?)
+	int line_at[USERS];
 	int char_at[USERS];
 	int user_buf[USERS];
 	int first_line;
 	int first_free_block;
-	int blocks_avail;
+	int blocks_avail;//this is the total length of text[], not the number of free blocks (the name is probably misleading; I couldn't think of a better one)
+	int lineno_width;//the number of decimal digits needed to represent the highest numbered line
 	struct Line text[];
 };
 
@@ -509,12 +511,13 @@ void renumber_lines(int after) {
 		num = 0;
 	} else {
 		line = b_get(after).next;
-		num = b_get(after).lineno + 1;
+		num = b_get(after).lineno;
 	}
 	while(line != -1) {
-		b_get(line).lineno = num++;
+		b_get(line).lineno = ++num;
 		line = b_get(line).next;
 	}
+	data->lineno_width = 1 + log10(num);
 }
 
 int relative_line(int line,int dis) {
@@ -638,12 +641,14 @@ void draw_screen() {
 }
 
 //does not correctly handle files containing '\0'
+//does not care if the last line ends with \n, one is assumed to be present
+//does not fill in the line numbers
 int read_file(FILE *file) {
 
 	char* tmp = NULL;
 	size_t n = 0;
 	int len;
-	int firstline;
+	int firstline = -1;
 
 	int line = -1;
 	while((len = getline(&tmp,&n,file)) != -1) {
@@ -679,7 +684,13 @@ int read_file(FILE *file) {
 
 	if(line != -1)
 		b_get(line).next = -1;
-
+	else {
+		//The file was empty. Insert a single empty line so that there is a place for text to go.
+		line = alloc_block();
+		b_get(line).longline = b_get(line).next = b_get(line).prev = b_get(line).buffer = -1;
+		b_get(line).str[0] = '\0';
+		firstline = line;
+	}
 	return firstline;
 }
 
@@ -1104,15 +1115,34 @@ void do_backspace() {
 	pthread_rwlock_unlock(&data->lock);
 }
 
+int key_at_col(int col) {
+	int group_size = 6 * 4;
+	int group_sep = COLS > 71 ? (COLS - 71)/2 : 0;
+
+	int group = col / (group_size+group_sep);
+	int key = col % (group_size + group_sep);
+
+	if(group > 2 || key >= group_size || key % 6 == 5)//the spot was 1) off the screen, somehow 2) in the blank seperating space 3) the single space between adjacent buttons
+		return -1;
+
+	return 4*group + key/6 + 1;
+}
+
 void handle_mouse() {
 	MEVENT event;
 	if(getmouse(&event) == OK && event.bstate == BUTTON1_PRESSED) {
-		read_lock();
-		int dest_line = relative_line(data->line_at[user_no],event.y - lines_from_top);
-		lines_from_top += b_get(dest_line).lineno - b_get(data->line_at[user_no]).lineno;//different than event.y iff the click was below the bottom of the file
-		empty_buf();
-		move_to_screen_pos(dest_line,event.x + horizontal_scroll);
-		pthread_rwlock_unlock(&data->lock);
+		if(event.y < LINES) {//move to the position they clicked
+			read_lock();
+			int dest_line = relative_line(data->line_at[user_no],event.y - lines_from_top);
+			lines_from_top += b_get(dest_line).lineno - b_get(data->line_at[user_no]).lineno;//different than event.y iff the click was below the bottom of the file
+			empty_buf();
+			move_to_screen_pos(dest_line,event.x + horizontal_scroll);
+			pthread_rwlock_unlock(&data->lock);
+		} else {//they clicked on one of the two rows containing fn key labels
+			int key = key_at_col(event.x);
+			if(key > 0)
+				ungetch(KEY_F(key));
+		}
 	}
 }
 
@@ -1150,8 +1180,10 @@ void clear_all() {
 	}
 }
 
+
 int dialog(const char* msg,char* input) {
 	WINDOW* msg_win = newwin(5,NAME_LEN + 2,0,0);
+	keypad(msg_win,true);
 	box(msg_win,0,0);
 	mvwhline(msg_win,2,1,0,NAME_LEN);
 	mvwaddstr(msg_win,1,1,msg);
@@ -1352,7 +1384,9 @@ int main(int argc,char *argv[]) {
 					if((file = fopen(name,"r")) != NULL) {
 						write_lock();
 						clear_all();
-						data->first_line = read_file(file);
+						int tmp = read_file(file);
+						data->first_line = tmp;
+						renumber_lines(-1);
 						int user;
 						for(user = 0;user<USERS;++user)
 							if(data->line_at[user] == -1)
@@ -1383,6 +1417,9 @@ int main(int argc,char *argv[]) {
 						relative_line(data->line_at[user_no],LINES),
 						to_screen_pos(data->line_at[user_no],data->char_at[user_no]));
 				pthread_rwlock_unlock(&data->lock);
+				break;
+			case KEY_RESIZE:
+				slk_noutrefresh();//I seem to remember the fn key labels being messed up by window resizes, but I can't get it to happen anymore so this may not be necessary
 				break;
 			case '\t':
 				type_letter('\t');

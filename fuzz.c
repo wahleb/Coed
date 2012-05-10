@@ -19,7 +19,7 @@ int main() {
 	printf(DOWN_S);
 	int i;
 	for(i=0;i<400;++i)
-		printf("%dab\n\bc%d\b " DOWN_S UP_S,i,i);
+		printf("%d\tab\n\bc%d\b " DOWN_S UP_S,i,i);
 //		printf("%da\nbc%d " ,i,i);
 	printf(PGDOWN_S HOME_S "done");
 	printf(F10_S);
