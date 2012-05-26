@@ -1,4 +1,4 @@
-Welcome to COED, the COperative EDitor!
+Welcome to COED, the COllaborative EDitor!
 
 SYNOPSIS
 	coed [-d] [-c filename] roomname
@@ -36,20 +36,16 @@ CONTROLS
 	Mouse: click on a location to move the cursor there
 
 
-NOTES
-	There may be some trouble with getting special keys such as page up, home, f2, etc. to be correctly interpreted when logged in via ssh.
-	This probably has something to do with an incorrect setting in termcap or whatnot, but the simplest workaround is probably to just run COED inside
-	of screen and let screen handle all those settings for you. To do so just run "screen /tmp/coed room1"
-	Ironically, it seems that when using putty coed will only receive mouse input when NOT run in screen.
-
 BUGS/LIMITATIONS
+	COED unconditionally trusts the data in shared memory. By default, COED creates shared memory that is universally writeable.
+
 	COED does not check whether a piece of shared memory is valid before attempting to connect. Attempting to connect to shared memory that uses
 	a different structure will result in corruption of data.
 
 	If the program exits while it holds a lock that lock will remain, making all other connected programs to wait indefinitely.
 	This will only occur when the termination was due to abnormal circumstances such as the receipt of a signal.
 
-	Any user with write access to the shared memory can cause the program to write to arbitrary memory locations. Do not use this program if you are worried about security.
+	F10 is used by Ubuntu's default terminal emulator, so it may not be the best choice for quit
 
 NEW STUFF
 	Fixed the bug that caused the program to block/crash during the class demonstration

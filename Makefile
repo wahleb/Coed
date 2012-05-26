@@ -1,6 +1,6 @@
 
 coed: main.c
-	gcc -Wall -lncurses -lm -lrt -lpthread main.c -o coed -O2
+	gcc -Wall main.c -lncurses -lm -lrt -lpthread -o coed -O2
 
 fuzz: fuzz.c
 	gcc -Wall fuzz.c -o fuzz -O2
