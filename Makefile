@@ -1,7 +1,7 @@
 
 coed: main.c
 	gcc -Wall main.c -lncurses -lm -lrt -lpthread -o coed -O2
-
+#just ignore the rest
 fuzz: fuzz.c
 	gcc -Wall fuzz.c -o fuzz -O2
 

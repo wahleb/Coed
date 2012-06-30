@@ -45,6 +45,8 @@ BUGS/LIMITATIONS
 	If the program exits while it holds a lock that lock will remain, making all other connected programs to wait indefinitely.
 	This will only occur when the termination was due to abnormal circumstances such as the receipt of a signal.
 
+	Clicking beyond column 222 produces weird behavior; this is not caused by this program though
+
 	F10 is used by Ubuntu's default terminal emulator, so it may not be the best choice for quit
 
 NEW STUFF

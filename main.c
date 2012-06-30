@@ -31,6 +31,8 @@
 #define LINE_LEN 40 //entirely arbitrary
 #define LONG_LINE_LEN ((int) offsetof(struct Line,longline))
 
+#define MAGIC_NUM (0xC0ED + LONG_LINE_LEN)
+
 #define GROW_INC 500
 
 #define b_get(num) (data->text[(num)])
@@ -62,6 +64,7 @@ struct Line {
 
 
 struct Data {
+	int magic_num;
 	pthread_rwlock_t lock;
 	//NOT line number, but the index for the first block of the line
 	//-2 indicates no user, -1 is a user with no location (?)
@@ -158,6 +161,7 @@ void relock_write() {
 }
 
 void init_data() {
+	data->magic_num = 0;//will set this to the correct value once everything is set up
 	pthread_rwlockattr_t attr;
 	if(pthread_rwlockattr_init(&attr) ||
 			pthread_rwlockattr_setpshared(&attr,PTHREAD_PROCESS_SHARED) ||
@@ -1217,7 +1221,11 @@ void finish(void) {
 }
 
 int main(int argc,char *argv[]) {
+	//if we create a new shared memory resource make it read/writable by everyone
+	//Yes, this is horribly insecure, but it makes things easier
 	umask(0);
+
+	//The way we parse and handle arguments is less than elegant
 	int i;
 	bool create = false;
 	bool debug = false;
@@ -1227,7 +1235,12 @@ int main(int argc,char *argv[]) {
 			int k = 1;
 			while(argv[i][k] != '\0') {
 				switch(argv[i][k]) {
+					case 'C':
+						fname = "";
+						//fallthrough
 					case 'c':
+						if(create)
+							error(1,0,"Multiple creation flags");
 						create = true;
 						break;
 					case 'd':
@@ -1301,16 +1314,24 @@ int main(int argc,char *argv[]) {
 
 	if(create) {
 		init_data();
-		FILE *file = fopen(fname,"r");
-		if(file == NULL)
-			error(1,0,"unable to open file \"%s\"",fname);
+		if(fname[0] != '\0') {//-c fname was specified
+			FILE *file = fopen(fname,"r");
+			if(file == NULL)
+				error(1,0,"unable to open file \"%s\"",fname);
 
-//		data->first_line = read_file(file);
-		int tmp = read_file(file);
-		data->first_line = tmp;
-		fclose(file);
+			int tmp = read_file(file);
+			data->first_line = tmp;
+			fclose(file);
+		} else {//-C was specified
+			int line = alloc_block();
+			b_get(line).longline = b_get(line).next = b_get(line).prev = b_get(line).buffer = -1;
+			b_get(line).str[0] = '\0';
+			data->first_line = line;
+		}
 		renumber_lines(-1);
-	}
+		data->magic_num = MAGIC_NUM;
+	} else if(data->magic_num != MAGIC_NUM)
+		error(1,0,"bad magic number");
 
 	if((user_no = add_user()) < 0)
 		error(1,0,"User limit reached for %s",shm_name);
